@@ -1,0 +1,81 @@
+name: Render and Upload 1-Hour Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      imageUrl:
+        description: 'URL of the image to spin'
+        required: true
+      audioUrl:
+        description: 'URL of the audio loop'
+        required: true
+      spinSpeed:
+        description: 'Seconds per rotation'
+        required: true
+        default: '2.0'
+      bgColor:
+        description: 'Background hex color'
+        required: true
+        default: '#000000'
+      title:
+        description: 'YouTube Video Title'
+        required: true
+      description:
+        description: 'YouTube Video Description'
+        required: true
+      tags:
+        description: 'YouTube Video Tags (comma separated)'
+        required: true
+
+jobs:
+  render_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Download Assets
+        run: |
+          curl -L "${{ github.event.inputs.imageUrl }}" -o input_image.png
+          curl -L "${{ github.event.inputs.audioUrl }}" -o input_audio.mp3
+
+      - name: Generate 1-Hour Spinning Video
+        # We use a complex FFmpeg filter to rotate the image continuously and loop it for 3600 seconds (1 hour).
+        # We also loop the audio.
+        run: |
+          SPEED=${{ github.event.inputs.spinSpeed }}
+          # Convert seconds per rotation to degrees per second for FFmpeg (360 / SPEED)
+          
+          # FFmpeg rotate filter uses radians per second. 't*2*PI/SPEED' achieves exactly this.
+          # Pad to 16:9 720p with the background color
+          
+          ffmpeg -loop 1 -i input_image.png -stream_loop -1 -i input_audio.mp3 \
+          -filter_complex "[0:v]scale=720:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:${{ github.event.inputs.bgColor }},rotate=a='t*2*PI/$SPEED':c=none[v]" \
+          -map "[v]" -map 1:a \
+          -t 3600 -c:v libx264 -preset veryfast -crf 28 -c:a aac -b:a 128k \
+          -pix_fmt yuv420p output.mp4
+          
+          echo "Rendering complete."
+
+      - name: Upload to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          VIDEO_TITLE: ${{ github.event.inputs.title }}
+          VIDEO_DESC: ${{ github.event.inputs.description }}
+          VIDEO_TAGS: ${{ github.event.inputs.tags }}
+        run: |
+          python scripts/upload_to_youtube.py
