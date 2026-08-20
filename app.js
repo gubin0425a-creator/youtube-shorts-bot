@@ -52,9 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         
         showError(stageName, errorDetails) {
-            document.getElementById('alertTitle').textContent = errorDetails.title || `${stageName} Error`;
-            document.getElementById('alertMessage').textContent = errorDetails.message || 'Unknown error occurred.';
-            document.getElementById('alertTechLogs').textContent = errorDetails.techDetails || 'No technical details provided.';
+            const err = errorDetails || {};
+            document.getElementById('alertTitle').textContent = err.title || `${stageName} Error`;
+            document.getElementById('alertMessage').textContent = err.message || (err.error ? err.error : 'Unknown error occurred.');
+            document.getElementById('alertTechLogs').textContent = err.techDetails || 'No technical details provided.';
             
             const actions = document.getElementById('alertActions');
             actions.innerHTML = '';
