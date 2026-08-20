@@ -3,8 +3,8 @@ name: Render and Upload 1-Hour Video
 on:
   workflow_dispatch:
     inputs:
-      imageUrl:
-        description: 'URL of the image to spin'
+      imageFilename:
+        description: 'Filename of the image in the repo'
         required: true
       audioUrl:
         description: 'URL of the audio loop'
@@ -46,22 +46,19 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Download Assets
+      - name: Download Audio Asset
         run: |
-          curl -L "${{ github.event.inputs.imageUrl }}" -o input_image.png
           curl -L "${{ github.event.inputs.audioUrl }}" -o input_audio.mp3
 
       - name: Generate 1-Hour Spinning Video
-        # We use a complex FFmpeg filter to rotate the image continuously and loop it for 3600 seconds (1 hour).
-        # We also loop the audio.
         run: |
           SPEED=${{ github.event.inputs.spinSpeed }}
-          # Convert seconds per rotation to degrees per second for FFmpeg (360 / SPEED)
+          IMAGE_FILE=${{ github.event.inputs.imageFilename }}
           
           # FFmpeg rotate filter uses radians per second. 't*2*PI/SPEED' achieves exactly this.
           # Pad to 16:9 720p with the background color
           
-          ffmpeg -loop 1 -i input_image.png -stream_loop -1 -i input_audio.mp3 \
+          ffmpeg -loop 1 -i "$IMAGE_FILE" -stream_loop -1 -i input_audio.mp3 \
           -filter_complex "[0:v]scale=720:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:${{ github.event.inputs.bgColor }},rotate=a='t*2*PI/$SPEED':c=none[v]" \
           -map "[v]" -map 1:a \
           -t 3600 -c:v libx264 -preset veryfast -crf 28 -c:a aac -b:a 128k \
