@@ -191,6 +191,39 @@ const Modules = {
         const seo = Storage.getArtifact('seo') || { title: "Spinning Meme", description: "Spinning", tags: "meme" };
 
         try {
+            // 1. Fetch blob and convert to base64
+            onLog("info-log", "Uploading image to GitHub repository...");
+            const imgRes = await fetch(input.objectUrl);
+            const blob = await imgRes.blob();
+            const base64data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+
+            const imageFilename = `input_image_${Date.now()}.png`;
+
+            // 2. Upload image to repository
+            const uploadRes = await fetch(`https://api.github.com/repos/${ghRepo}/contents/${imageFilename}`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Authorization': `Bearer ${ghToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: "Auto-upload image for rendering",
+                    content: base64data
+                })
+            });
+
+            if (!uploadRes.ok) {
+                throw new Error(`Failed to upload image: ${await uploadRes.text()}`);
+            }
+
+            // 3. Trigger workflow
+            onLog("info-log", "Image uploaded! Triggering GitHub Actions Workflow...");
             const response = await fetch(`https://api.github.com/repos/${ghRepo}/actions/workflows/render_and_upload.yml/dispatches`, {
                 method: 'POST',
                 headers: {
@@ -199,9 +232,9 @@ const Modules = {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    ref: 'main', // Default branch
+                    ref: 'main',
                     inputs: {
-                        imageUrl: input.objectUrl,
+                        imageFilename: imageFilename,
                         audioUrl: input.audioUrl,
                         spinSpeed: input.spinSpeed.toString(),
                         bgColor: input.bgColor,
